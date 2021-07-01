@@ -908,7 +908,7 @@ export default class DeclarationTranspiler extends base.TranspilerBase {
     this.visitClassLikeName(name, typeParameters, heritageClauses, false);
     this.emit('{');
 
-    this.maybeEmitFakeConstructors(decl);
+    // this.maybeEmitFakeConstructors(decl);
 
     // Synthesize explicit properties for ctor with 'property parameters'
     let synthesizePropertyParam = (param: ts.ParameterDeclaration) => {
@@ -1044,9 +1044,10 @@ export default class DeclarationTranspiler extends base.TranspilerBase {
 
   private emitCastThisToPrivateClass(visitClassName: () => void) {
     this.emit('final Object t = this;');
-    this.emit('final _');
+    this.emit('final ');
+    this.emit('tt = t as _');
     visitClassName();
-    this.emit('tt = t;\n');
+    this.emit(';\n');
   }
 
   private emitMembersAsExtensions(
@@ -1054,6 +1055,7 @@ export default class DeclarationTranspiler extends base.TranspilerBase {
       visitNameOfExtensions: () => void, methods: ts.SignatureDeclaration[]) {
     this.visitPromises = true;
     this.fc.emitPromisesAsFutures = false;
+    
     // Emit private class containing external methods
     this.maybeEmitJsAnnotation(classDecl, {suppressUnneededPaths: false});
     this.emit(`abstract class _`);
@@ -1112,7 +1114,7 @@ export default class DeclarationTranspiler extends base.TranspilerBase {
     // Determine all valid arties of this method by going through the overloaded signatures
     const arities: Set<number> = new Set();
     for (const constituent of constituents) {
-      const arity = constituent.parameters.length;
+      const arity = constituent.parameters.filter((e) => !(<any>e).isOptional).length;
       arities.add(arity);
     }
     const sortedArities = Array.from(arities).sort();
@@ -1122,25 +1124,43 @@ export default class DeclarationTranspiler extends base.TranspilerBase {
         const suppliedParameters = mergedDeclaration.parameters.slice(0, firstOptionalIndex);
         const omittedParameters = mergedDeclaration.parameters.slice(
             firstOptionalIndex, mergedDeclaration.parameters.length);
-        // Emit null checks to verify the number of omitted parameters
-        this.emit('if (');
-        let isFirst = true;
-        for (const omitted of omittedParameters) {
-          if (isFirst) {
-            isFirst = false;
-          } else {
-            this.emit('&&');
-          }
-          this.visit(omitted.name);
-          this.emit('== null');
-        }
-        this.emit(') {');
-        this.emit('return promiseToFuture(');
-        this.emit(PRIVATE_CLASS_INSTANCE_IN_EXTENSIONS);
-        this.emit('.');
-        this.visitName(mergedDeclaration.name);
-        this.visitParameters(ts.createNodeArray(suppliedParameters), {namesOnly: true});
-        this.emit('); }\n');
+
+
+            for (let i = omittedParameters.length; i > 0; i--) {
+                const params = omittedParameters.slice(0, i);
+                
+                // Emit null checks to verify the number of omitted parameters
+                this.emit('if (');
+                let isFirst = true;
+                for (const omitted of params) {
+                  if (isFirst) {
+                    isFirst = false;
+                  } else {
+                    this.emit('&&');
+                  }
+                  this.visit(omitted.name);
+                  this.emit('!= null');
+                }
+
+
+                this.emit(') {');
+                this.emit('return promiseToFuture(');
+                this.emit(PRIVATE_CLASS_INSTANCE_IN_EXTENSIONS);
+                this.emit('.');
+                this.visitName(mergedDeclaration.name);
+                this.visitParameters(ts.createNodeArray([...suppliedParameters, ...params]), {namesOnly: true});
+                this.emit('); }\n');
+
+            }
+
+            this.emit('return promiseToFuture(');
+            this.emit(PRIVATE_CLASS_INSTANCE_IN_EXTENSIONS);
+            this.emit('.');
+            this.visitName(mergedDeclaration.name);
+            this.visitParameters(ts.createNodeArray(suppliedParameters), {namesOnly: true});
+            this.emit(');\n');
+                
+        
       } else {
         // No parameters were omitted, no null checks are necessary for this call
         this.emit('return promiseToFuture(');
@@ -1174,3 +1194,11 @@ export default class DeclarationTranspiler extends base.TranspilerBase {
     this.emit('(allowInterop((resolve, reject) { v.then(resolve, onError: reject); }));');
   }
 }
+
+
+
+
+// js_facade_gen % node index.js \
+// --destination=dart_src \
+// --base-path=/Users/britov/IdeaProjects/temp/node_modules/@twilio/conversations/lib  \
+// /Users/britov/IdeaProjects/temp/node_modules/@twilio/conversationslib/conversation.d.ts

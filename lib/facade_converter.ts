@@ -380,6 +380,12 @@ export class FacadeConverter extends base.TranspilerBase {
 
     let name: string;
     let comment: string;
+
+    let isOptional = (<any>node.parent).isOptional === true;
+    if (isOptional) {
+      console.log('optional type')
+    }
+
     if (!node) {
       return 'dynamic';
     }
@@ -425,6 +431,7 @@ export class FacadeConverter extends base.TranspilerBase {
       }
     } else if (ts.isTypePredicateNode(node)) {
       name = 'bool';
+      name += isOptional ? '?' : '';
       comment = base.ident(node.parameterName) + ' is ' +
           this.generateDartTypeName(node.type, addInsideComment(options));
     } else if (ts.isTupleTypeNode(node)) {
@@ -433,6 +440,7 @@ export class FacadeConverter extends base.TranspilerBase {
       node.elementTypes.forEach((t) => mergedType.merge(t));
       name += this.generateDartTypeName(mergedType.toTypeNode(), addInsideTypeArgument(options));
       name += '>';
+      name += isOptional ? '?' : '';
       // This is intentionally not valid Dart code so that it is clear this isn't a Dart code
       // comment that should use the /*= syntax.
       comment =
@@ -442,6 +450,7 @@ export class FacadeConverter extends base.TranspilerBase {
       merged.merge(node);
       let simpleType = merged.toSimpleTypeNode();
       if (simpleType) {
+        (<any>simpleType.parent).isOptional = true;
         name = this.generateDartTypeName(simpleType, addHideComment(options));
       } else {
         name = 'dynamic';
@@ -530,8 +539,10 @@ export class FacadeConverter extends base.TranspilerBase {
     } else if (ts.isArrayTypeNode(node)) {
       name = 'List' +
           '<' + this.generateDartTypeName(node.elementType, addInsideTypeArgument(options)) + '>';
+      name += isOptional ? '?' : '';
     } else if (node.kind === ts.SyntaxKind.NumberKeyword) {
       name = 'num';
+      name += isOptional ? '?' : '';
     } else if (ts.isLiteralTypeNode(node)) {
       const literal = node.literal;
       if (ts.isLiteralExpression(literal)) {
@@ -544,8 +555,10 @@ export class FacadeConverter extends base.TranspilerBase {
         name = 'bool';
         comment = 'false';
       }
+      name += isOptional ? '?' : '';
     } else if (ts.isStringLiteral(node) || node.kind === ts.SyntaxKind.StringKeyword) {
       name = 'String';
+      name += isOptional ? '?' : '';
     } else if (node.kind === ts.SyntaxKind.NullKeyword) {
       name = 'Null';
     } else if (
@@ -556,6 +569,7 @@ export class FacadeConverter extends base.TranspilerBase {
       name = 'dynamic';
     } else if (node.kind === ts.SyntaxKind.BooleanKeyword) {
       name = 'bool';
+      name += isOptional ? '?' : '';
     } else if (node.kind === ts.SyntaxKind.AnyKeyword) {
       name = 'dynamic';
     } else if (ts.isParenthesizedTypeNode(node)) {
@@ -651,7 +665,10 @@ export class FacadeConverter extends base.TranspilerBase {
   generateDartName(identifier: ts.EntityName, options: TypeDisplayOptions): string {
     const ret = this.lookupCustomDartTypeName(identifier, options);
     if (ret) {
-      return base.formatType(ret.name, ret.comment, options);
+      let isOptional = (<any>identifier.parent.parent).isOptional === true;
+      let name = ret.name;
+      name += isOptional ? '?' : '';
+      return base.formatType(name, ret.comment, options);
     }
     // TODO(jacobr): handle library import prefixes more robustly. This generally works but is
     // fragile.

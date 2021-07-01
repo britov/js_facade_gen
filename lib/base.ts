@@ -25,6 +25,9 @@ export interface TypeDisplayOptions {
   /// Dart outside comment: dynamic /* num|string */
   insideComment?: boolean;
 
+  /// Null safety
+  isOptional?: boolean;
+
   /// Dart has additional restrictions for what types are valid to emit inside a type argument. For
   /// example, "void" is not valid inside a type argument so Null has to be used instead.
   ///
@@ -333,6 +336,7 @@ export function getModuleName(moduleDecl: ts.ModuleDeclaration): string {
 }
 
 export function formatType(s: string, comment: string, options: TypeDisplayOptions): string {
+  s += options.isOptional ? '?' : '';
   if (!comment || options.hideComment) {
     return s;
   } else if (options.insideComment) {
@@ -494,7 +498,7 @@ export class TranspilerBase {
   /**
    * Returns whether any parameters were actually emitted.
    */
-  visitParameterList(nodes: ts.ParameterDeclaration[], namesOnly: boolean): boolean {
+  visitParameterList(nodes: ts.ParameterDeclaration[], namesOnly: boolean, isOptional = false): boolean {
     let emittedParameters = false;
     for (let i = 0; i < nodes.length; ++i) {
       let param = nodes[i];
@@ -594,6 +598,10 @@ export class TranspilerBase {
       }
     }
 
+    for (let i = firstInitParamIdx; i < parameters.length; i++) {
+      (<any>parameters[i]).isOptional = true;
+    }
+
     let hasValidParameters = false;
     if (firstInitParamIdx !== 0) {
       let requiredParams = parameters.slice(0, firstInitParamIdx);
@@ -606,7 +614,7 @@ export class TranspilerBase {
       if (!namesOnly) {
         this.emit('[');
       }
-      this.visitParameterList(positionalOptional, namesOnly);
+      this.visitParameterList(positionalOptional, namesOnly, true);
       if (!namesOnly) {
         this.emitNoSpace(']');
       }
